@@ -3,6 +3,16 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 import type { Request, Response } from "express";
+// Extend Express Request to include `user` property set by auth middleware
+declare global {
+  namespace Express {
+    interface Request {
+      user?: any;
+    }
+  }
+}
+import types = require("jose-cjs");
+import remote = require("jose-cjs/jwks/remote");
 
 dotenv.config();
 
@@ -41,6 +51,29 @@ async function connectToMongo() {
 
 connectToMongo();
 
+const JWKS = remote.createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`));
+
+const verifyToken = async (req: Request, res: Response, next: any) => {
+  const authHeader = req?.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const token = authHeader?.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  try {
+    const { payload } = await types.jwtVerify(token, JWKS);
+    console.log("Decoded payload:", payload);
+    req.user = payload;
+    next();
+  } catch (error) {
+    console.error("Token verification failed:", error);
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+};
+
 app.get("/", (_req: Request, res: Response) => {
   res.json({
     success: true,
@@ -72,6 +105,21 @@ app.get("/api/resources", async (_req: Request, res: Response) => {
   }
 });
 
+app.get("/api/resources/add", verifyToken, (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    message: "Authorized",
+  });
+});
+
+app.get("/api/resources/manage", verifyToken, (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    message: "Authorized",
+  });
+});
+
+
 app.get("/api/resources/:id", async (req: Request, res: Response) => {
   if (!db) {
     return res.status(503).json({
@@ -79,6 +127,8 @@ app.get("/api/resources/:id", async (req: Request, res: Response) => {
       message: "Database is not ready yet.",
     });
   }
+
+
 
   try {
     const id = req.params.id;
@@ -113,7 +163,11 @@ app.get("/api/resources/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.post("/api/resources", async (req: Request, res: Response) => {
+
+
+
+
+app.post("/api/resources", verifyToken, async (req: Request, res: Response) => {
   if (!db) {
     return res.status(503).json({ success: false, message: "Database is not ready yet." });
   }
@@ -121,6 +175,8 @@ app.post("/api/resources", async (req: Request, res: Response) => {
     const body = req.body;
     const doc = {
       ...body,
+      uploadedBy: req.user.email,
+      userId: req.user.sub,
       createdAt: new Date(),
     };
     const result = await db.collection("resources").insertOne(doc);
@@ -131,7 +187,7 @@ app.post("/api/resources", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/api/resources/:id", async (req: Request, res: Response) => {
+app.put("/api/resources/:id", verifyToken, async (req: Request, res: Response) => {
   if (!db) {
     return res.status(503).json({ success: false, message: "Database is not ready yet." });
   }
@@ -156,7 +212,7 @@ app.put("/api/resources/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.delete("/api/resources/:id", async (req: Request, res: Response) => {
+app.delete("/api/resources/:id", verifyToken, async (req: Request, res: Response) => {
   if (!db) {
     return res.status(503).json({ success: false, message: "Database is not ready yet." });
   }
