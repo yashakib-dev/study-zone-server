@@ -12,7 +12,6 @@ declare global {
   }
 }
 import types = require("jose-cjs");
-import remote = require("jose-cjs/jwks/remote");
 
 dotenv.config();
 
@@ -51,7 +50,7 @@ async function connectToMongo() {
 
 connectToMongo();
 
-const JWKS = remote.createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`));
+const JWKS = types.createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`));
 
 const verifyToken = async (req: Request, res: Response, next: any) => {
   const authHeader = req?.headers.authorization;
@@ -232,3 +231,4 @@ app.delete("/api/resources/:id", verifyToken, async (req: Request, res: Response
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
